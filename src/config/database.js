@@ -1,15 +1,19 @@
-// src/config/database.js
-
 import { PrismaClient } from '@prisma/client';
- 
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development'
-    ? ['query', 'info', 'warn', 'error']
-    : ['error'],
-});
 
-process.on('beforeExit', async () => {
-  await prisma.$disconnect();
-});
+const globalForPrisma = globalThis;
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    log:
+      process.env.NODE_ENV === 'development'
+        ? ['query', 'info', 'warn', 'error']
+        : ['error'],
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
 
 export default prisma; 
+ 
