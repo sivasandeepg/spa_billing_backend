@@ -1,0 +1,118 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+    
+model User {
+  id       String @id @default(uuid())
+  username String @unique
+  email    String @unique
+  password String
+  role     String @default("pos")
+  status   String @default("ACTIVE")
+  name     String?
+  
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  @@map("users")
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  manager   String?
+  createdAt DateTime @default(now())
+  
+  users     User[]
+
+  @@map("branches")
+} 
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  
+  services    Service[] // Relationship to the new Service model
+
+  @@map("categories")
+}
+
+model Service {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  price       Float     @default(0.0)
+  createdAt   DateTime  @default(now())
+  
+  // Relationship to Category
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  // Relationship to Branch
+  branchIds   String[]
+  
+  @@map("services")
+}
+  
+// model Customer {
+//   id    String @id @default(uuid())
+//   name  String
+//   phone String @unique // Phone is unique to prevent duplicate customers
+//   email String?
+
+//   @@map("customers") // Maps to a table named 'customers'
+// }  
+
+model Customer {
+  id    String @id @default(uuid())
+  name  String
+  phone String @unique
+  email String?
+  
+  // A customer can have many transactions
+  transactions Transaction[]
+
+  @@map("customers")
+}
+
+model Transaction {
+  id            String          @id @default(uuid())
+  total         Float
+  cashier       String
+  paymentMethod String
+  timestamp     DateTime        @default(now())
+  
+  // Link to a Customer
+  customerId    String?
+  customer      Customer?       @relation(fields: [customerId], references: [id])
+  
+  // One-to-many relationship with transaction items
+  items         TransactionItem[]
+
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id          String      @id @default(uuid())
+  name        String
+  price       Float
+  quantity    Int
+  
+  // Link to a Transaction
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  @@map("transaction_items")
+}    

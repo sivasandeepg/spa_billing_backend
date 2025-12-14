@@ -1,0 +1,240 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users who can log in to the system (admin, manager, pos)
+model User {
+  id                    String         @id @default(uuid())
+  username              String         @unique
+  email                 String         @unique
+  password              String
+  role                  String         @default("pos") // admin, manager, pos
+  status                String         @default("ACTIVE")
+  name                  String?
+  createdAt             DateTime       @default(now())
+
+  branchId              String?
+  branch                Branch?        @relation(fields: [branchId], references: [id])
+
+  // A User can be a cashier for many transactions
+  cashierForTransactions Transaction[] @relation("CashierTransactions")
+
+  @@map("users")
+}
+
+// Branch model with transactions
+model Branch {
+  id                    String         @id @default(uuid())
+  name                  String         @unique
+  address               String?
+  phone                 String?
+  email                 String?
+  manager               String?
+  status                String         @default("ACTIVE")
+  createdAt             DateTime       @default(now())
+
+  users                 User[]
+  employees             Employee[]
+  transactions          Transaction[]
+  combos                Combo[]
+
+  @@map("branches")
+}
+
+// Employees (therapists/service providers)
+model Employee {
+  id                    String         @id @default(uuid())
+  name                  String
+  phone                 String         @unique
+  email                 String?
+  designation           String
+  commission            Float          @default(0.0) // percentage
+  status                String         @default("ACTIVE")
+  createdAt             DateTime       @default(now())
+
+  branchId              String
+  branch                Branch         @relation(fields: [branchId], references: [id])
+
+  providedServices      TransactionItem[]
+  referredCustomers     Customer[]      @relation("EmployeeReferredCustomers")
+  referredMemberships   Membership[]    @relation("EmployeeReferredMemberships")
+
+  @@map("employees")
+}
+
+model Category {
+  id                    String         @id @default(uuid())
+  name                  String         @unique
+  description           String?
+  status                String         @default("ACTIVE")
+  createdAt             DateTime       @default(now())
+
+  services              Service[]
+
+  @@map("categories")
+}
+
+model Service {
+  id                    String         @id @default(uuid())
+  name                  String
+  description           String?
+  price                 Float          @default(0.0)
+  duration              Int?           // in minutes
+  status                String         @default("ACTIVE")
+  createdAt             DateTime       @default(now())
+
+  categoryId            String
+  category              Category       @relation(fields: [categoryId], references: [id])
+
+  branchIds             String[]
+
+  transactionItems      TransactionItem[]
+  comboServices         ComboService[]
+
+  @@map("services")
+}
+
+enum ReferralSource {
+  WALK_IN
+  GOOGLE_ADS
+  NEARBY_COUPON
+  FRIEND_REFERRAL
+  EMPLOYEE_REFERRAL
+  SOCIAL_MEDIA
+  OTHER
+}
+
+model Customer {
+  id                    String         @id @default(uuid())
+  name                  String
+  phone                 String         @unique
+  email                 String?
+  referralSource        ReferralSource @default(WALK_IN)
+  referralDetails       String?
+  createdAt             DateTime       @default(now())
+
+  referredByEmployeeId  String?
+  referredByEmployee    Employee?      @relation("EmployeeReferredCustomers", fields: [referredByEmployeeId], references: [id])
+
+  memberships           Membership[]
+  transactions          Transaction[]
+
+  @@map("customers")
+}
+
+model Transaction {
+  id                    String          @id @default(uuid())
+  invoiceNumber         String          @unique @default(uuid())
+  subtotal              Float           @default(0.0)
+  discount              Float           @default(0.0)
+  tipAmount             Float           @default(0.0)
+  total                 Float
+  paymentMethod         String
+  notes                 String?
+  timestamp             DateTime        @default(now())
+
+  cashierId             String          @default(uuid())
+  cashier               User            @relation("CashierTransactions", fields: [cashierId], references: [id])
+
+  branchId              String
+  branch                Branch          @relation(fields: [branchId], references: [id])
+
+  customerId            String?
+  customer              Customer?       @relation(fields: [customerId], references: [id])
+  
+  items                 TransactionItem[]
+
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id                    String          @id @default(uuid())
+  name                  String
+  price                 Float
+  quantity              Int
+  itemType              String          // SERVICE, COMBO
+
+  transactionId         String
+  transaction           Transaction     @relation(fields: [transactionId], references: [id])
+
+  employeeId            String?
+  employee              Employee?       @relation(fields: [employeeId], references: [id])
+  
+  serviceId             String?
+  service               Service?        @relation(fields: [serviceId], references: [id])
+  
+  comboId               String?
+  combo                 Combo?          @relation(fields: [comboId], references: [id])
+
+  @@map("transaction_items")
+}
+
+model Combo {
+  id                    String          @id @default(uuid())
+  name                  String
+  description           String?
+  totalPrice            Float
+  discountPrice         Float
+  status                String          @default("ACTIVE")
+  createdAt             DateTime        @default(now())
+  
+  branchId              String
+  branch                Branch          @relation(fields: [branchId], references: [id])
+  
+  services              ComboService[]
+  transactionItems      TransactionItem[]
+
+  @@map("combos")
+}
+
+model ComboService {
+  id                    String @id @default(uuid())
+  quantity              Int    @default(1)
+  
+  comboId               String
+  combo                 Combo  @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  
+  serviceId             String
+  service               Service @relation(fields: [serviceId], references: [id])
+  
+  @@unique([comboId, serviceId])
+  @@map("combo_services")
+}
+
+model Membership {
+  id                    String          @id @default(uuid())
+  membershipCode        String          @unique
+  type                  String
+  price                 Float
+  startDate             DateTime
+  endDate               DateTime
+  status                String          @default("ACTIVE")
+  
+  customerId            String
+  customer              Customer        @relation(fields: [customerId], references: [id])
+
+  referredByEmployeeId  String?
+  referredByEmployee    Employee?       @relation("EmployeeReferredMemberships", fields: [referredByEmployeeId], references: [id])
+
+  @@map("memberships")
+}
+
+model Coupon {
+  id                    String          @id @default(uuid())
+  code                  String          @unique
+  discount              Float
+  validFrom             DateTime
+  validUntil            DateTime
+  usageLimit            Int?
+  usageCount            Int             @default(0)
+  status                String          @default("ACTIVE")
+
+  @@map("coupons")
+}  

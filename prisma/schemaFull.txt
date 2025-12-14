@@ -1,0 +1,415 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users who can log in to the system (admin, manager, pos)
+model User {
+  id                    String         @id @default(uuid())
+  username              String         @unique
+  email                 String         @unique
+  password              String
+  role                  UserRole       @default(POS)
+  status                UserStatus     @default(ACTIVE)
+  name                  String?
+  lastLogin             DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  branchId              String?
+  branch                Branch?        @relation(fields: [branchId], references: [id])
+
+  // A User can be a cashier for many transactions
+  cashierForTransactions Transaction[] @relation("CashierTransactions")
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  POS
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// Branch model with transactions
+model Branch {
+  id                    String         @id @default(uuid())
+  name                  String         @unique
+  address               String?
+  phone                 String?
+  email                 String?
+  manager               String?
+  status                BranchStatus   @default(ACTIVE)
+  operatingHours        Json?          // Store operating hours as JSON
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  users                 User[]
+  employees             Employee[]
+  transactions          Transaction[]
+  combos                Combo[]
+
+  @@map("branches")
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+// Employees (therapists/service providers)
+model Employee {
+  id                    String         @id @default(uuid())
+  employeeCode          String         @unique
+  name                  String
+  phone                 String         @unique
+  email                 String?
+  designation           String
+  commission            Float          @default(0.0) // percentage (0-100)
+  salary                Float?
+  status                EmployeeStatus @default(ACTIVE)
+  hireDate              DateTime       @default(now())
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  branchId              String
+  branch                Branch         @relation(fields: [branchId], references: [id])
+
+  providedServices      TransactionItem[]
+  referredCustomers     Customer[]      @relation("EmployeeReferredCustomers")
+  referredMemberships   Membership[]    @relation("EmployeeReferredMemberships")
+
+  @@map("employees")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+model Category {
+  id                    String         @id @default(uuid())
+  name                  String         @unique
+  description           String?
+  status                CategoryStatus @default(ACTIVE)
+  sortOrder             Int            @default(0)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  services              Service[]
+
+  @@map("categories")
+}
+
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Service {
+  id                    String         @id @default(uuid())
+  name                  String
+  description           String?
+  price                 Float          @default(0.0)
+  duration              Int?           // in minutes
+  status                ServiceStatus  @default(ACTIVE)
+  isPopular             Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  categoryId            String
+  category              Category       @relation(fields: [categoryId], references: [id])
+
+  branchIds             String[]       // Array of branch IDs where this service is available
+
+  transactionItems      TransactionItem[]
+  comboServices         ComboService[]
+
+  @@map("services")
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+enum ReferralSource {
+  WALK_IN
+  GOOGLE_ADS
+  NEARBY_COUPON
+  FRIEND_REFERRAL
+  EMPLOYEE_REFERRAL
+  SOCIAL_MEDIA
+  WEBSITE
+  RETURN_CUSTOMER
+  OTHER
+}
+
+model Customer {
+  id                    String         @id @default(uuid())
+  customerCode          String         @unique
+  name                  String
+  phone                 String         @unique
+  email                 String?
+  dateOfBirth           DateTime?
+  gender                Gender?
+  address               String?
+  referralSource        ReferralSource @default(WALK_IN)
+  referralDetails       String?
+  totalSpent            Float          @default(0.0)
+  visitCount            Int            @default(0)
+  lastVisit             DateTime?
+  status                CustomerStatus @default(ACTIVE)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  referredByEmployeeId  String?
+  referredByEmployee    Employee?      @relation("EmployeeReferredCustomers", fields: [referredByEmployeeId], references: [id])
+
+  memberships           Membership[]
+  transactions          Transaction[]
+
+  @@map("customers")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+model Transaction {
+  id                    String          @id @default(uuid())
+  invoiceNumber         String          @unique
+  subtotal              Float           @default(0.0)
+  discount              Float           @default(0.0)
+  taxAmount             Float           @default(0.0)
+  tipAmount             Float           @default(0.0)
+  total                 Float
+  paymentMethod         PaymentMethod
+  paymentStatus         PaymentStatus   @default(COMPLETED)
+  notes                 String?
+  timestamp             DateTime        @default(now())
+  
+  cashierId             String
+  cashier               User            @relation("CashierTransactions", fields: [cashierId], references: [id])
+
+  branchId              String
+  branch                Branch          @relation(fields: [branchId], references: [id])
+
+  customerId            String?
+  customer              Customer?       @relation(fields: [customerId], references: [id])
+  
+  membershipId          String?         // If membership was used
+  couponCode            String?         // If coupon was applied
+  
+  items                 TransactionItem[]
+
+  @@map("transactions")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  NET_BANKING
+  WALLET
+  SPLIT_PAYMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model TransactionItem {
+  id                    String          @id @default(uuid())
+  name                  String
+  price                 Float
+  originalPrice         Float           // Store original price before any discounts
+  quantity              Int
+  itemType              ItemType
+  discount              Float           @default(0.0)
+
+  transactionId         String
+  transaction           Transaction     @relation(fields: [transactionId], references: [id])
+
+  employeeId            String?
+  employee              Employee?       @relation(fields: [employeeId], references: [id])
+  
+  serviceId             String?
+  service               Service?        @relation(fields: [serviceId], references: [id])
+  
+  comboId               String?
+  combo                 Combo?          @relation(fields: [comboId], references: [id])
+
+  @@map("transaction_items")
+}
+
+enum ItemType {
+  SERVICE
+  COMBO
+  PRODUCT
+  MEMBERSHIP
+}
+
+model Combo {
+  id                    String          @id @default(uuid())
+  name                  String
+  description           String?
+  totalPrice            Float           // Sum of individual service prices
+  discountPrice         Float           // Actual selling price
+  discountPercentage    Float           // Calculated discount percentage
+  validityDays          Int?            // How long the combo is valid after purchase
+  status                ComboStatus     @default(ACTIVE)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  branchId              String
+  branch                Branch          @relation(fields: [branchId], references: [id])
+  
+  services              ComboService[]
+  transactionItems      TransactionItem[]
+
+  @@map("combos")
+}
+
+enum ComboStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+model ComboService {
+  id                    String @id @default(uuid())
+  quantity              Int    @default(1)
+  
+  comboId               String
+  combo                 Combo  @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  
+  serviceId             String
+  service               Service @relation(fields: [serviceId], references: [id])
+  
+  @@unique([comboId, serviceId])
+  @@map("combo_services")
+}
+
+model Membership {
+  id                    String          @id @default(uuid())
+  membershipCode        String          @unique
+  type                  MembershipType
+  price                 Float
+  discountPercentage    Float           @default(0.0) // Discount on services
+  startDate             DateTime
+  endDate               DateTime
+  status                MembershipStatus @default(ACTIVE)
+  benefits              Json?           // Store membership benefits as JSON
+  
+  customerId            String
+  customer              Customer        @relation(fields: [customerId], references: [id])
+
+  referredByEmployeeId  String?
+  referredByEmployee    Employee?       @relation("EmployeeReferredMemberships", fields: [referredByEmployeeId], references: [id])
+
+  @@map("memberships")
+}
+
+enum MembershipType {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  ANNUAL
+  LIFETIME
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+model Coupon {
+  id                    String          @id @default(uuid())
+  code                  String          @unique
+  name                  String
+  description           String?
+  discountType          DiscountType    @default(PERCENTAGE)
+  discount              Float           // Percentage (1-100) or Fixed amount
+  minimumAmount         Float?          // Minimum transaction amount to apply coupon
+  maximumDiscount       Float?          // Maximum discount amount (for percentage coupons)
+  validFrom             DateTime
+  validUntil            DateTime
+  usageLimit            Int?            // Total usage limit
+  usagePerCustomer      Int?            // Usage limit per customer
+  usageCount            Int             @default(0)
+  status                CouponStatus    @default(ACTIVE)
+  applicableServices    String[]        // Array of service IDs (empty means all services)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@map("coupons")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum CouponStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+// New model for tracking coupon usage per customer
+model CouponUsage {
+  id                    String          @id @default(uuid())
+  couponId              String
+  customerId            String
+  transactionId         String
+  usedAt                DateTime        @default(now())
+
+  @@unique([couponId, customerId, transactionId])
+  @@map("coupon_usage")
+}
+
+// New model for system settings
+model SystemSetting {
+  id                    String          @id @default(uuid())
+  key                   String          @unique
+  value                 String
+  description           String?
+  category              String          @default("general")
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@map("system_settings")
+}    
