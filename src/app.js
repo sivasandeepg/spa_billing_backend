@@ -17,19 +17,19 @@ const app = express();
 
 // Set the array of origins explicitly, including your deployed Vercel frontend.
 const allowedOrigins = [
-  'http://localhost:5173', // Your development frontend
-  'https://spa-billing-frontend.vercel.app' // Your deployed Vercel frontend
+'http://localhost:5173', // Your development frontend
+'https://spabillingbackend-production.up.railway.app' // Your deployed Vercel frontend
 ];
-
+                
 // Add the environment variable URL if it exists (for Railway setup flexibility)
 if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
+allowedOrigins.push(process.env.FRONTEND_URL);
 }
-
+  
 // Middleware: CORS is correctly configured using the array of allowed origins.
 app.use(cors({
-  origin: allowedOrigins, 
-  credentials: true
+origin: allowedOrigins, 
+credentials: true
 }));   
 
 app.use(express.json({ limit: '10mb' }));
@@ -40,8 +40,8 @@ const limiter = rateLimit({
   max: 100
 });
 // app.use(limiter);
-
-// Routes
+ 
+// Routes 
 app.use('/api', routes);
 
 // Health check

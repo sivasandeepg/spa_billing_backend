@@ -12,5 +12,5 @@ const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 
 // CRUCIAL CHANGE: Adding '0.0.0.0' or using the HOST variable
 app.listen(PORT, HOST, () => {
-  console.log(`🚀 Server running on port ${PORT} at host ${HOST}`);
+console.log(`🚀 Server running on port ${PORT} at host ${HOST}`);
 });
